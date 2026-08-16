@@ -3,7 +3,6 @@ CREATE TABLE `prueba-covalto-data.covalto_soporte.tickets` (
   creado_en TIMESTAMP NOT NULL,
   origen STRING NOT NULL,
   remitente STRING NOT NULL,
-  hilo_id STRING,
   texto_original STRING NOT NULL,
   tipo STRING,
   estado STRING NOT NULL,
