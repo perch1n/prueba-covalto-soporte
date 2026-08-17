@@ -2,7 +2,7 @@
 
 Sistema que reemplaza el desorden de reportes en canales de chat con un flujo estructurado: mensajes clasificados con IA, revisión humana antes de crear tickets, y visibilidad operativa en un tablero.
 
-Prueba técnica · Fabián Gómez · Agosto 2026
+Prueba técnica
 
 Repo: https://github.com/perch1n/prueba-covalto-soporte
 Dashboard: https://datastudio.google.com/reporting/31eaddcd-4d8a-487f-a38f-fa39c753d09e
