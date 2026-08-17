@@ -181,19 +181,17 @@ Incluye:
 
 ## Decisiones de diseño (las que vale la pena defender)
 
-**Una sola tabla `tickets` con estado `descartado`, no dos tablas separadas.** Es como lo hacen Jira Service Management y Zendesk. Un descarte es información valiosa para medir la calidad del clasificador, no un caso aparte que se guarda en otro lado.
+**Una sola tabla `tickets` con estado `descartado`, no dos tablas separadas.** Un descarte es información valiosa para medir la calidad del clasificador, no un caso aparte que se guarda en otro lado.
 
-**La prioridad se calcula, no se le pide a la IA.** Gemini estima impacto y urgencia; el sistema aplica la matriz ITIL. En banca esta trazabilidad es obligatoria y así puedo explicar exactamente por qué un ticket es P0.
+**La prioridad se calcula, no se le pide a la IA.** Gemini estima impacto y urgencia; el sistema aplica la matriz ITIL. Esta trazabilidad es obligatoria y así puedo explicar exactamente por qué un ticket es P0.
 
 **Human-in-the-loop.** Nada se activa automáticamente, la IA sugiere y el humano decide. Esto evita errores automatizados en producción, genera datos etiquetados para mejorar el clasificador, y da control sobre casos ambiguos.
-
-**DML en vez de streaming inserts en BigQuery.** El streaming buffer bloquea UPDATE por hasta 90 minutos. Como el ciclo de vida del ticket requiere actualizar seguido, `INSERT ... VALUES` con parámetros nombrados es la opción correcta.
 
 **Structured output con enums cerrados.** Gemini no puede inventar sistemas que no existen. Si el mensaje habla de algo desconocido, devuelve `desconocido`. Es una defensa contra alucinaciones.
 
 **Particionamiento y clustering desde el inicio.** Con el volumen actual el impacto es mínimo, pero es la práctica correcta y escala sin cambios.
 
-**BigQuery como capa única en el MVP.** Es un trade-off consciente: en producción separaría transaccional (Cloud SQL) y analítico (BigQuery) con CDC via Datastream. Para 2 días de MVP, la separación es sobreingeniería.
+**BigQuery como capa única en el MVP.** Es un trade-off consciente: en producción separaría transaccional (Cloud SQL) y analítico (BigQuery) con CDC via Datastream.
 
 ---
 
@@ -203,8 +201,55 @@ Incluye:
 - **Runbooks ejecutables en 4 niveles** (documentado → sugerido → aprobado → auto). Cloud Functions dedicadas con service accounts de permisos mínimos.
 - **SLA watcher automático** con Cloud Scheduler ejecutando cada 5 min.
 - **Correlación humano ↔ sistema** cuando hay reportes duplicados sobre el mismo componente.
-- **Redacción de PII explícita** con regex antes de cada llamada a Gemini (para tarjetas, cédulas, cuentas). Actualmente el prompt le pide a Gemini que no las repita, pero un módulo separado es más robusto.
 - **Cloud SQL Postgres como transaccional** con Datastream sincronizando a BigQuery. Es el diseño de producción real.
+
+---
+
+## Cómo se vería en producción
+
+El MVP corre local con CLI porque no tengo Workspace ni infraestructura desplegada. La idea si esto pasara a producción de verdad:
+
+```
+Google Chat (canal #incidents)
+      ↓
+Chat App en Apps Script
+      ↓
+Cloud Run                    ← procesa y clasifica
+      ↓         ↓
+Postgres    Vertex AI Gemini
+      ↓
+Datastream (CDC)
+      ↓
+BigQuery                     ← solo para el tablero
+      ↓
+Looker Studio
+```
+
+Los cambios principales serían:
+
+Postgres pasa a ser la base transaccional (soporta bien los UPDATE del ciclo de vida del ticket), y BigQuery queda solo para el análisis y el tablero. Datastream mantiene los dos sincronizados sin código de por medio.
+
+El CLI se reemplaza por una Chat App hecha en Apps Script. Los slash commands funcionan igual, solo cambia de dónde llegan. El clasificador y el store del MVP se reutilizan tal cual.
+
+Los runbooks que hoy están documentados pasan a ser Cloud Functions con permisos mínimos: una función por acción (rerun del DAG, restart del job, etc.), cada una con su propia service account.
+
+El SLA watcher que hoy corre a mano pasa a Cloud Scheduler ejecutando cada 5 minutos, y las credenciales se mueven de `.env` a Secret Manager.
+
+Nada de esto implica rediseño. La lógica de dominio ya está desacoplada del canal.
+
+---
+
+## Pregunta abierta para el equipo
+
+¿tiene sentido construir un sistema propio de gestión de tickets, o Covalto se beneficiaría más de una herramienta ya existente tipo PagerDuty, Opsgenie o similar?
+
+Este sistema resuelve bien el triage con IA sobre el canal de chat, que es el problema puntual del enunciado. Pero un sistema completo de incident management maduro tiene muchas más cosas: on-call rotativo, notificaciones telefónicas garantizadas para P0, integración nativa con 700+ herramientas de monitoreo, app móvil, dashboards de post-mortem, SLA de disponibilidad del propio proveedor.
+
+Todo eso construirlo desde cero toma meses. Y luego mantenerlo.
+
+Tal vez la arquitectura más sensata sea combinar: este sistema (o algo parecido) para el triage inteligente y clasificación con IA sobre el canal de chat, y una herramienta comprada para el on-call y las notificaciones críticas cuando ya se confirmó un P0.
+
+No tengo el contexto completo de qué usan hoy en Covalto ni cuál es el equipo real de soporte, así que es más una pregunta que una recomendación. Me gustaría entender si ya evaluaron alguna de esas herramientas y qué los llevó a la decisión actual.
 
 ---
 
