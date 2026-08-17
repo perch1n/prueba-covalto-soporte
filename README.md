@@ -1,4 +1,4 @@
-# Sistema de Soporte por Eventos - Covalto
+# Sistema de soporte - Covalto
 
 Sistema que reemplaza el desorden de reportes en canales de chat con un flujo estructurado: mensajes clasificados con IA, revisión humana antes de crear tickets, y visibilidad operativa en un tablero.
 
